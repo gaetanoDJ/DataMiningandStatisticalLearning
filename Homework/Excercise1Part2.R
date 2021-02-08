@@ -24,3 +24,21 @@ bike_total2 = bikeshare %>%
 ggplot(bike_total2)+
   geom_bar(aes(x=weathersit))+
   facet_wrap(~ workingday) 
+
+
+data = bikeshare
+
+sub_data3 = data %>% filter(hr==8) %>% filter(workingday==1) %>% 
+  group_by(weathersit) %>% summarize(average_rent = mean(total))
+sub_test = data %>% filter(hr==8) %>% filter(workingday==1) %>% 
+  summarize(average_rent = mean(total))
+
+sub_data3 = sub_data3 %>% mutate(workingday = 1)
+sub_data4 = data %>% filter(hr==8) %>% filter(workingday==0) %>% 
+  group_by(weathersit) %>% summarize(average_rent = mean(total))
+sub_data4 = sub_data4 %>% mutate(workingday = 0)
+merged_data = rbind(sub_data3, sub_data4)
+
+ggplot(merged_data, aes(x = weathersit, y = average_rent, fill = factor
+                        (weathersit))) + geom_bar(stat = "identity") + 
+  facet_wrap(~workingday) + xlab("Weather Situation") + ylab("Average Rental")
