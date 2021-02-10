@@ -1,5 +1,5 @@
 ---
-title: "Homework1"
+title: "Homework 1 by Gaetano Dona-Jehan & Jordan Fox"
 output: pdf_document
 ---
 
