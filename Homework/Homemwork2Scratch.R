@@ -50,6 +50,9 @@ saratoga_split = initial_split(SaratogaHouses, prop = 0.8)
 saratoga_train = training(saratoga_split)
 saratoga_test = testing(saratoga_split)
 
+lm_medium = lm(price ~ ., data=SaratogaHouses)
+lm_step = step(lm_medium, 
+               scope=~(.)^2)
 # Fit to the training data
 # Sometimes it's easier to name the variables we want to leave out
 # The command below yields exactly the same model.
@@ -91,6 +94,7 @@ RMSE5 <- NULL
 RMSE6 <- NULL
 RMSE7 <- NULL
 RMSE8 <- NULL
+RMSE9 <- NULL
 for (i in seq(1:500)){
   saratoga_training = sample.int(Total, saratoga_train, replace=FALSE)
   saratoga_testing = setdiff(1:Total,  saratoga_training)
@@ -106,7 +110,19 @@ lm5 = lm(price ~ . - sewer - fuel - heating - fireplaces - pctCollege, data = sa
 lm6 = lm(price ~ . + I(livingArea^2) - sewer - fuel - heating - fireplaces - pctCollege, data = saratoga_training)
 lm7 = lm(price ~ . + I(livingArea^2)+ I(bedrooms^2)  - sewer - fuel - heating - fireplaces - pctCollege, data = saratoga_training)
 lm8 = lm(price ~ . + I(livingArea^2)+ I(bathrooms^2) - sewer - fuel - heating - fireplaces - pctCollege, data = saratoga_training)
-
+lm9 = lm(formula = price ~ lotSize + age + landValue + livingArea + 
+           pctCollege + bedrooms + fireplaces + bathrooms + rooms + 
+           heating + fuel + sewer + waterfront + newConstruction + centralAir + 
+           livingArea:centralAir + landValue:newConstruction + bathrooms:heating + 
+           livingArea:fuel + age:sewer + age:pctCollege + landValue:fireplaces + 
+           livingArea:fireplaces + fireplaces:waterfront + livingArea:waterfront + 
+           age:centralAir + fuel:centralAir + bedrooms:fireplaces + 
+           lotSize:landValue + bedrooms:waterfront + landValue:bathrooms + 
+           pctCollege:newConstruction + heating:waterfront + rooms:heating + 
+           bedrooms:fuel + pctCollege:fireplaces + livingArea:pctCollege + 
+           lotSize:rooms + heating:sewer + fireplaces:sewer + lotSize:sewer + 
+           bedrooms:sewer + bathrooms:sewer + landValue:fuel + fuel:sewer + 
+           age:waterfront, data = saratoga_training)
 #Run it on the actual and the predicted values
 RMSE1[i]= rmse(lm1, saratoga_testing)
 RMSE2[i]= rmse(lm2, saratoga_testing)
@@ -116,6 +132,7 @@ RMSE5[i]= rmse(lm5, saratoga_testing)
 RMSE6[i]= rmse(lm6, saratoga_testing)
 RMSE7[i]= rmse(lm7, saratoga_testing)
 RMSE8[i]= rmse(lm8, saratoga_testing)
+RMSE9[i]= rmse(lm9, saratoga_testing)
 }
 
 mean(RMSE1)
@@ -126,7 +143,7 @@ mean(RMSE5)
 mean(RMSE6)
 mean(RMSE7)
 mean(RMSE8)
-
+mean(RMSE9)
 
   Total = nrow(SaratogaHouses)
   saratoga_training = round(Total*0.80)
