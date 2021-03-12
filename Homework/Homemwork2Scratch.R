@@ -22,8 +22,8 @@ MetroBoard = Metro %>%
   summarize(avgboard = mean(boarding))
 
 
-ggplot(data = MetroBoard)+
-  geom_line(mapping = aes(x=hour_of_day, y=avgboard, group = month, colour = month)) +
+ggplot(data = MetroBoard, aes(x=hour_of_day, y=avgboard, group = month, colour = month))+
+  geom_line() + xlab("Hour of Day")  + ylab("Average Boarders") + labs(colour='Month')+
   facet_wrap(~ day_of_week)
 
 
@@ -33,9 +33,10 @@ MetroTemp = Metro %>%
   group_by(day_of_week)
 
 MetroTemp$Weekend1 = ifelse(Metro$weekend %in% "weekend" , 1, 0)
-ggplot(data = MetroTemp)+
-  geom_point(mapping = aes(x=temperature, y=boarding, group = factor(Weekend1), colour =factor(Weekend1))) +
-  facet_wrap(~ hour_of_day)
+ggplot(data = MetroTemp,aes(x=temperature, y=boarding, group = factor(Weekend1), colour =factor(Weekend1)))+
+  geom_point() + xlab("Temperature")  + ylab("Boarders") + labs(colour='Type of Day')+
+  facet_wrap(~ hour_of_day) +
+  scale_color_manual(labels = c("Weekday", "Weekend"), values = c("blue", "red"))
 
 
 ####  Problem 2
@@ -50,9 +51,29 @@ saratoga_split = initial_split(SaratogaHouses, prop = 0.8)
 saratoga_train = training(saratoga_split)
 saratoga_test = testing(saratoga_split)
 
-lm_medium = lm(price ~ ., data=SaratogaHouses)
-lm_step = step(lm_medium, 
+
+
+k_grid = seq(2,100) 
+rmse_grid = foreach(K = k_grid, .combine='c') %do% {
+  knn_model = knnreg(price ~ . - sewer - fuel - heating - fireplaces - pctCollege,saratoga_train, k=K)
+  rmse(knn_model,saratoga_test)
+} 
+
+
+rmse_grid = data.frame(K = k_grid, RMSE = rmse_grid)
+
+ggplot(rmse_grid)+
+  geom_point(aes(x=K, y=RMSE))+
+  labs(y="RMSE", title="RMSE vs k for KNN regression: 65 AMGs")
+
+
+
+lm_all = lm(price ~ ., data=SaratogaHouses)
+summary(lm_all)
+stargazer::stargazer(lm_all)
+lm_step = step(lm_all, 
                scope=~(.)^2)
+stargazer::stargazer(lm_step)
 # Fit to the training data
 # Sometimes it's easier to name the variables we want to leave out
 # The command below yields exactly the same model.
@@ -145,32 +166,34 @@ mean(RMSE7)
 mean(RMSE8)
 mean(RMSE9)
 
-  Total = nrow(SaratogaHouses)
+  
+standardize 
+
+Total = nrow(SaratogaHouses)
   saratoga_training = round(Total*0.80)
   saratoga_testing = (Total-saratoga_train)
 
-  saratoga_training = sample.int(Total, saratoga_train, replace=FALSE)
+  saratoga_training = sample.int(Total, saratoga_training, replace=FALSE)
   saratoga_testing = setdiff(1:Total,  saratoga_training)
   
   saratoga_training = SaratogaHouses[saratoga_training,]
   saratoga_testing = SaratogaHouses[saratoga_testing,]
   
-  XTrain = model.matrix(~ lotSize + pctCollege  + heating  + bathrooms + bedrooms 
-                               + rooms + fuel + centralAir + landValue, data=saratoga_training) 
+  XTrain = model.matrix(~ . - sewer - fuel - heating - fireplaces - pctCollege, data=saratoga_training) 
   XTest = model.matrix(~ lotSize + pctCollege  + heating  + bathrooms + bedrooms 
                              + rooms + fuel + centralAir + landValue, data=saratoga_testing)
   
   Ytraining = saratoga_training$price
   Ytesting = saratoga_testing$price
   
-  scale_training = apply(Xtrain, 2, sd) 
-  Xscaled_train = scale(Xtrain, scale = scale_training)
+  scale_training = apply(XTrain, 2, sd) 
+  Xscaled_train = scale(Xrain, scale = scale_training)
   Xscaled_test = scale(Xtest, scale = scale_training) 
   
 
   k_grid = seq(2,100) 
   rmse_grid = foreach(K = k_grid, .combine='c') %do% {
-    knn_model = knnreg(price ~ Xtrain,saratoga_training, k=K)
+    knn_model = knnreg(price ~ XTrain,saratoga_training, k=K)
     rmse(knn_model,saratoga_testing)
   } 
   
@@ -179,4 +202,56 @@ mean(RMSE9)
   ggplot(rmse_grid)+
     geom_point(aes(x=K, y=RMSE))+
     labs(y="RMSE", title="RMSE vs k for KNN regression: 65 AMGs")
+  
+  
+  
+  data(SaratogaHouses)  
+  K_folds = 20
+  SaratogaHouses_folds =crossv_kfold(SaratogaHouses, k=K_folds)  
+  k_grid = seq(2,100) 
+  
+  cv_grid = foreach(K = k_grid, .combine='c') %do% {
+    models = map(SaratogaHouses_folds$train,~ knnreg(price~ . - sewer - fuel - heating - fireplaces - pctCollege, k=K, data = ., use.all=FALSE)) 
+    errs = map2_dbl(models, SaratogaHouses$test, modelr::rmse) 
+    c(k=K, err =mean(errs), std_err =sd(errs)/sqrt(K_folds))
+    } %>% as.data.frame
+  
+  
+ggplot(cv_grid)+
+  geom_point(aes(x=K, y=err))+
+  geom_errorbar(aes(x=K, ymin = err-std_err, ymax = err+std_err))+
+  labs(y="RMSE", title="RMSE vs k for KNN regression: S350s")
+  
+data(SaratogaHouses)
+
+StanSaratogaHouses <- SaratogaHouses %>%
+  mutate_at(c('lotSize',"age",'landValue', "livingArea"), ~(scale(.) %>% as.vector))
+
+saratoga_split = initial_split(StanSaratogaHouses, prop = 0.8)
+saratoga_train = training(saratoga_split)
+saratoga_test = testing(saratoga_split)
+
+
+
+data(SaratogaHouses)
+
+StanSaratogaHouses <- SaratogaHouses %>%
+  mutate_at(c('lotSize',"age",'landValue', "livingArea"), ~(scale(.) %>% as.vector))
+
+K_folds = 20
+SaratogaHouses_folds =crossv_kfold(StanSaratogaHouses, k=K_folds)
+
+
+k_grid = seq(2,100, by=2) 
+rmse_grid = foreach(k = k_grid, .combine='rbind') %do% {
+  knn_model= map(SaratogaHouses_folds$train, ~ knnreg(price ~ . - sewer - fuel - heating - fireplaces - pctCollege,data = ., k=k, use.all = FALSE))
+  errs = map2_dbl(knn_model, SaratogaHouses_folds$test, modelr::rmse)
+  c(k=k, err = mean(errs))
+} %>% as.data.frame
+
+Value=mean(min(rmse_grid$err))
+
+ggplot(rmse_grid)+
+  geom_point(aes(x=k, y=err))+
+  labs(y="RMSE", title="RMSE vs k for KNN regression", subtitle = Value)
   

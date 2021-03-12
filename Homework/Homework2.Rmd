@@ -1,21 +1,34 @@
 ---
 title: "Homework2"
-output: pdf_document
+output:
+  pdf_document: default
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-library(ggplot2)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
 library(tidyverse)
+library(ggplot2)
 library(modelr)
+library(rsample)
+library(mosaic)
+library(foreach)
 library(FNN)
+library(caret)
 ```
 
 ## Problem 1
 
 ### Part A
 ```{r}
-capmetro_UT = mutate(capmetro_UT,day_of_week = factor(day_of_week,levels=c("Mon", "Tue","Wed","Thu","Fri","Sat", "Sun")),month = factor(month, levels=c("Sep","Oct","Nov")))
+
+
+capmetro_UT <- read.csv('G:/Github/DataMiningandStatisticalLearning/Homework/capmetro_UT.csv')
+capmetro_UT = mutate(capmetro_UT,
+                     day_of_week = factor(day_of_week,
+                                          levels=c("Mon", "Tue", "Wed","Thu", "Fri", "Sat", "Sun")),
+                     month = factor(month,
+                                    levels=c("Sep", "Oct","Nov")))
 
 Metro <- capmetro_UT
 
@@ -24,12 +37,14 @@ MetroBoard = Metro %>%
   summarize(avgboard = mean(boarding))
 
 
-ggplot(data = MetroBoard)+
-  geom_line(mapping = aes(x=hour_of_day, y=avgboard, group = month, colour = month)) +
+ggplot(data = MetroBoard, aes(x=hour_of_day, y=avgboard, group = month, colour = month))+
+  geom_line() + xlab("Hour of Day")  + ylab("Average Boarders") + labs(colour='Month')+
   facet_wrap(~ day_of_week)
 
 
 ```
+
+What we have here is a series of graphs that show the average boarding size with respect to the time of day. Furthermore, each graph, starting from top left and going rightwards, represents a day of the week beginning with Monday and ending with Sunday. The colored lines represents the average boarding size with respect to the time of day in the given month. As we can see from the graphs, the hour of peak boarding do not seem to change day to day during the weekday as it always happens between the 15th and 17.5th hour of the day. This is not surprising given the fact that most classes have ended by this point and most people have finished their working shift. The best explanation as to why boarding on Mondays in September and the average boarding in Wednesday, Thursday and Friday in November look lower is due to holidays. The first Monday in September is always labor day, meaning that students do not have classes, and some workers have the day off, whereas the days mentioned in November is when the Thanksgiving holidays occur. 
 
 ### Part B
 
@@ -38,19 +53,38 @@ MetroTemp = Metro %>%
   group_by(day_of_week)
 
 MetroTemp$Weekend1 = ifelse(Metro$weekend %in% "weekend" , 1, 0)
-ggplot(data = MetroTemp)+
-  geom_point(mapping = aes(x=temperature, y=boarding, group = factor(Weekend1), colour =factor(Weekend1))) +
-  facet_wrap(~ hour_of_day)
+ggplot(data = MetroTemp,aes(x=temperature, y=boarding, group = factor(Weekend1), colour =factor(Weekend1)))+
+  geom_point() + xlab("Temperature")  + ylab("Boarders") + labs(colour='Type of Day')+
+  facet_wrap(~ hour_of_day) +
+  scale_color_manual(labels = c("Weekday", "Weekend"), values = c("blue", "red"))
 ```
 
 
+In these series of graphs, we are plotting the average boarding as a function of temperature in 15-minute intervals and showing whether the datapoints represent the weekday or weekend. When we hold hour of day and weekend status constant, there does not seem that temperature has a noticeable effect on the number of UT students riding the bus. In some cases , we can see an uptick in the number of boarders at around 90 degrees Fahrenheit but this could simply be due to unknown factors. 
 
 ## Problem 2
-```{r}
+```{r, results='hide'}
 data(SaratogaHouses)
+
+saratoga_split = initial_split(SaratogaHouses, prop = 0.8)
+saratoga_train = training(saratoga_split)
+saratoga_test = testing(saratoga_split)
+
+lm_all = lm(price ~ ., data=SaratogaHouses)
+lm_step = step(lm_all, 
+               scope=~(.)^2)
+```
+
+There are two ways that I used to build the best linear model. The first is by looking running a regression of price on all the variables to determine which variables to keep based off their statistical significance. The second way is using the step function and allowing for interactions between the variables. I then estimate the out-of-sample RMSE over many different random train/test splits.   
+
+
+
+
+
+```{r, warning=FALSE}
 Total = nrow(SaratogaHouses)
 saratoga_train = round(Total*0.80)
-saratoga_test = (Total-saratoga_train)
+saratoga_testing = (Total-saratoga_train)
 
 RMSE1 <- NULL
 RMSE2 <- NULL
@@ -71,10 +105,21 @@ lm1 = lm(price ~ lotSize + bedrooms + bathrooms, data=saratoga_training)
 lm2 = lm(price ~ . - pctCollege - sewer - waterfront - landValue - newConstruction, data=saratoga_training)
 lm3 = lm(price ~ (. - pctCollege - sewer - waterfront - landValue - newConstruction)^2, data=saratoga_training) 
 lm4 = lm(price ~ . , data = saratoga_training)
-lm5 = lm(price ~ . - sewer - fuel - heating - fireplaces - pctCollege, data = saratoga_training)
-lm6 = lm(price ~ . + I(livingArea^2) - sewer - fuel - heating - fireplaces - pctCollege, data = saratoga_training)
-lm7 = lm(price ~ . + I(livingArea^2)+ I(bedrooms^2)  - sewer - fuel - heating - fireplaces - pctCollege, data = saratoga_training)
-lm8 = lm(price ~ . + I(livingArea^2)+ I(bathrooms^2) - sewer - fuel - heating - fireplaces - pctCollege, data = saratoga_training)
+lm5 = lm(price ~ lotSize + age + landValue + livingArea + 
+    pctCollege + bedrooms + fireplaces + bathrooms + rooms + 
+    heating + fuel + sewer + waterfront + newConstruction + centralAir + 
+    livingArea:centralAir + landValue:newConstruction + bathrooms:heating + 
+    livingArea:fuel + age:sewer + age:pctCollege + landValue:fireplaces + 
+    livingArea:fireplaces + fireplaces:waterfront + livingArea:waterfront + 
+    age:centralAir + fuel:centralAir + bedrooms:fireplaces + 
+    lotSize:landValue + bedrooms:waterfront + landValue:bathrooms + 
+    pctCollege:newConstruction + heating:waterfront + rooms:heating + 
+    bedrooms:fuel + pctCollege:fireplaces + livingArea:pctCollege + 
+    lotSize:rooms + heating:sewer + fireplaces:sewer + lotSize:sewer + 
+    bedrooms:sewer + bathrooms:sewer + landValue:fuel + fuel:sewer + 
+    age:waterfront, data = saratoga_training)
+lm6 = lm(price ~ . - sewer - fuel - heating - fireplaces - pctCollege, data = saratoga_training)
+
 
 #Run it on the actual and the predicted values
 RMSE1[i]= rmse(lm1, saratoga_testing)
@@ -83,8 +128,8 @@ RMSE3[i]= rmse(lm3, saratoga_testing)
 RMSE4[i]= rmse(lm4, saratoga_testing)
 RMSE5[i]= rmse(lm5, saratoga_testing)
 RMSE6[i]= rmse(lm6, saratoga_testing)
-RMSE7[i]= rmse(lm7, saratoga_testing)
-RMSE8[i]= rmse(lm8, saratoga_testing)
+
+
 }
 
 mean(RMSE1)
@@ -93,47 +138,37 @@ mean(RMSE3)
 mean(RMSE4)
 mean(RMSE5)
 mean(RMSE6)
-mean(RMSE7)
-mean(RMSE8)
+
 ```
+
+The RMSE that we are concerned are RMSE 5 and RMSE 6 . The RMSE 5 represents the linear regression based off the result of the step function, whereas the RMSE 6 represents the model that I visually inspected and selected the variables. As we can see the RMSE of my handmade visual model is signficantly better than what the step function found, which is a bit surprising. 
 
 ### KNN
 
 ```{r}
-Total = nrow(SaratogaHouses)
-  saratoga_training = round(Total*0.80)
-  saratoga_testing = (Total-saratoga_train)
 
-  saratoga_training = sample.int(Total, saratoga_train, replace=FALSE)
-  saratoga_testing = setdiff(1:Total,  saratoga_training)
-  
-  saratoga_training = SaratogaHouses[saratoga_training,]
-  saratoga_testing = SaratogaHouses[saratoga_testing,]
-  
-  XTrain = model.matrix(~ lotSize + pctCollege  + heating  + bathrooms + bedrooms 
-                               + rooms + fuel + centralAir + landValue, data=saratoga_training) 
-  XTest = model.matrix(~ lotSize + pctCollege  + heating  + bathrooms + bedrooms 
-                             + rooms + fuel + centralAir + landValue, data=saratoga_testing)
-  
-  Ytraining = saratoga_training$price
-  Ytesting = saratoga_testing$price
-  
-  scale_training = apply(Xtrain, 2, sd) 
-  Xscaled_train = scale(Xtrain, scale = scale_training)
-  Xscaled_test = scale(Xtest, scale = scale_training) 
-  
+StanSaratogaHouses <- SaratogaHouses %>%
+  mutate_at(c('lotSize',"age",'landValue', "livingArea"), ~(scale(.) %>% as.vector))
 
-  k_grid = seq(2,100) 
-  rmse_grid = foreach(K = k_grid, .combine='c') %do% {
-    knn_model = knnreg(price ~ Xtrain,saratoga_training, k=K)
-    rmse(knn_model,saratoga_testing)
-  } 
-  
-  rmse_grid = data.frame(K = k_grid, RMSE = rmse_grid)
+K_folds = 20
+SaratogaHouses_folds =crossv_kfold(StanSaratogaHouses, k=K_folds)
 
-  ggplot(rmse_grid)+
-    geom_point(aes(x=K, y=RMSE))
+
+k_grid = seq(2,100, by=2) 
+rmse_grid = foreach(k = k_grid, .combine='rbind') %do% {
+  knn_model= map(SaratogaHouses_folds$train, ~ knnreg(price ~ . - sewer - fuel - heating - fireplaces - pctCollege,data = ., k=k, use.all = FALSE))
+  errs = map2_dbl(knn_model, SaratogaHouses_folds$test, modelr::rmse)
+ c(k=k, err = mean(errs))
+} %>% as.data.frame
+
+Value=min(rmse_grid$err)
+
+ggplot(rmse_grid)+
+  geom_point(aes(x=k, y=err))+
+  labs(y="RMSE", title="RMSE vs k for KNN regression", subtitle = Value)
+
+
 ```
 
-
+The model that seems to do better at achieving lower out-of-sample mean-squared error is the linear model that I made by hand. This means for the local taxing authority that if they want to predict the market values for properties in order to tax them, they should consider all the variables in the dataset with the exception of sewer, fuel, and heating type, the number of fireplaces that a house has and the percent of college students situated near the property.  
 ## Problem 3
