@@ -1,0 +1,112 @@
+---
+title: "Excercise3"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+library(rsample) 
+library(gamlr)
+```
+
+## Question 2
+
+For this question, we are considering the data called green buildings that contains data on 7,894 commercial rental properties from the United States. Of these 7,894, only 685 properties are considered as "green" properties, meaning that they obtained either a LEED or EnergyStar certification. 
+
+The goal of this exercise is to build the best predicitive model possible for revenue per square foot per calendar year and use this model to quantify the average change in rental income per square foor associated with green certification, assuming that there is a change, holding all other features constant. In order to get this revenue per sqaure foot per year, henceforth referred to as revenue, we need to take the produc of rent and the leasing rate of the buildings. What this revenue reflects is that a high-rent building with low occupancy might not bring in as much revenue as a lower-rent building with a higher occupancy. 
+
+In this chunk of code, we create the Revenue variable and attach it to our dataset. 
+
+
+```{r}
+Green <- greenbuildings
+Green$Revenue <- Green$Rent*Green$leasing_rate
+head(Green,n=0)
+```
+
+As we can see from the head command, there are now a total of 24 variables, the 23 variables from the orginal data set plus the new revenue variable, making the data set a bit unwieldy. Conseqeuntly, we decided to remove certain variables.
+
+The first two variables that we removed where CS.PropertyID and cluster as we both agreed that these variables will have no bearings on our models. For example, the Property ID just allows the property manager, or whoever looks at this data set, to quickly find a property. We also decided to remove the cluster variable as the cluster contains one green certified building and at least one other non-green-certified building in a given area. Again, like the Property ID, we understood this variable as a way for the property manager to find a specfic building rather than a descriptor.
+
+We decided to remove the next four variables because we viewed them as redundant. Since Revenue is a product of leasing_rate and rent, there would be a bias in the coefficents of other variables. We decided to remove LEED and EnergyStar certifications, although it is not necessary, because we only want to look at the overall green rating and we want to cut down on the processing time of finding our models. If we were to include LEED and ENergyStar in our models, our green rating result would be the same but our model would also now predict the average change in revenue per square per year of having either a LEED certification or an EnergyStar certification. We could then see which certification is better to get in terms of increasing revenue. 
+
+
+```{r}
+Green$Rent <- NULL
+Green$leasing_rate <- NULL
+Green$CS_PropertyID <- NULL
+Green$cluster <- NULL
+Green$LEED <- NULL
+Green$Energystar <- NULL
+GreenL <- Green #replicating our cleaned data set to a new one specifically for the LASSO
+```
+
+
+We decided to use two methods to determine the impact of a green certification on revenue. The first is to create a model using the stepwise forward selection model, allowing for the possibility of interactions, and then show the associated coefficient with the green rating. 
+
+A word of warning, we set up this R chunk in such a way to show our code but it will not run if we knit the program. This is a decision we made because the stepwise forward selection method is computationally heavy. This process took us roughly 15 min to run.
+
+
+```{r, eval=FALSE}
+Green_split = initial_split(Green, prop = 0.8)
+Green_train = training(Green_split)
+Green_test = testing(Green_split)
+
+
+lm_all = lm(Revenue ~ ., data=Green_train)
+lm_step = step(lm_all, 
+               scope=~(.)^2)
+```
+
+However, the model that we get from the above R chunk is copied below and will run when knit. 
+
+
+```{r}
+lm_fin <- lm(formula = Revenue ~ size + empl_gr + stories + age + renovated + 
+    class_a + class_b + green_rating + net + amenities + cd_total_07 + 
+    hd_total07 + Precipitation + Gas_Costs + Electricity_Costs + 
+    City_Market_Rent + size:City_Market_Rent + age:City_Market_Rent + 
+    empl_gr:Electricity_Costs + size:stories + renovated:City_Market_Rent + 
+    green_rating:amenities + size:age + Electricity_Costs:City_Market_Rent + 
+    size:renovated + stories:renovated + stories:City_Market_Rent + 
+    cd_total_07:hd_total07 + age:hd_total07 + renovated:hd_total07 + 
+    size:Electricity_Costs + amenities:hd_total07 + age:cd_total_07 + 
+    age:Precipitation + amenities:Gas_Costs + amenities:Precipitation + 
+    class_a:Gas_Costs + size:class_a + size:class_b + age:class_a + 
+    size:hd_total07 + stories:age + renovated:cd_total_07 + class_a:hd_total07 + 
+    class_a:Electricity_Costs + class_a:Precipitation + class_a:amenities + 
+    Precipitation:Gas_Costs + class_a:cd_total_07, data = Green_train)
+
+summary(lm_fin)$coefficients['green_rating',]
+lm_step$coefficients['green_rating']
+```
+
+According to the stepwise forward selection model, it would seem that buildings with a green certidication being in \$414.19 more revenuq per square foor on average compared to non-green buildings.
+
+Now we will compare this result to our results of our second method of determining the coefficient using the cross validation for gamma lasso penalaty selection. 
+
+```{r}
+GreenL <- na.omit(GreenL)
+scx = sparse.model.matrix(Revenue ~  . -1 , data=GreenL) # include -1 to drop intercept
+scy = GreenL$Revenue
+sccvl = cv.gamlr(scx, scy, nfold=20, verb=FALSE)
+
+coef(sccvl, select = "min")
+
+```
+According to the LASSO method, it would seem that buildings with a green certification rating earn \$139.35 more on average than buildings without such a rating. 
+
+Although we get different values for the coefficients, we can see that they are both of the same sign, which provides us with some support that buildings with a green rating  earn more that buildings without such a rating. The difference in the coefficients is mostly due to the two different methods that we use. 
+
+It is important to note that simply because these coefficients are positive, it does not mean that having a green rating causes an increase in the revenue, there might simply be a correlation. On such correlation that comes into mind is that buildings with a green rating are more likely to be newer buildings, thus charge on average a higher rent. To verify this claim let us look at the average ages of the buildings given their green certification status.
+
+```{r}
+mean(Green$age[Green$green_rating==1])
+mean(Green$age[Green$green_rating==0])
+```
+
+As we can see, there is a very significant age difference between buildings, and since the models indicate that there is a decrease in revenue based as the age of a building increases, this would explain part of why buildings with a green certification earn more revenue. 

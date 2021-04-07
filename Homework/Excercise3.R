@@ -25,3 +25,6 @@ lm_step = step(lm_all,
 lm1 <- lm_step
 lm_step2 = step(lm1, scope = ~(.)^2)
 
+head(Green, n=0)
+
+mean(Green$age[Green$green_rating==1])
