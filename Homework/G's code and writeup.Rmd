@@ -1,0 +1,142 @@
+---
+title: "Homework4G"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(arules)  # has a big ecosystem of packages built around it
+library(arulesViz)
+library(igraph)
+library(ggplot2)
+library(LICORS)  # for kmeans++
+library(foreach)
+library(mosaic)
+library(nnet)
+library(randomForest)
+library(rpart)
+library(gbm)
+```
+
+## Question 1
+
+Let us see if there are any major chemcial differences between red and white wines by doing some explanatory analysis. 
+
+```{r}
+winecopy <- wine
+wine1 <- wine[,-(13)]
+wine %>% 
+    pivot_longer(1:12, names_to = "chemicals", values_to = "quantity") %>%
+    ggplot(aes(quantity, fill = color)) +
+    geom_density(alpha = 0.5)+
+    facet_wrap(.~chemicals, scale = "free")
+```
+
+From what we can see, there are some similiarities in the chemical composition between the two types of wine. However, we are able to see some distinct differences in the chemical composition. White Wine tends to contain less clhorides than white wine, but has a higher quantity of total sulfur dioxide. What is interesting, is that the pH levels between the two wines are not that distinct. The way that people normally talk about would suggest that red wine is signficantly more acidic than white wine, but the explanatory analysis of these wines suggest otherwise.  
+
+
+
+To start our analysis, we will first see if we are able to distinguish the reds from the white using the kmeans clustering method and comparing it to the principal compoenent analysis method.
+
+
+### Clustering
+
+We first need to drop the 13th column as it is a non-numeric column as we want to scale the data. 
+
+```{r}
+winecopy <- wine
+wine1 <- wine[,-(13)]
+X = wine1
+X = scale(X, center=TRUE, scale=TRUE)
+```
+
+We then perform a k-means clustering on our data where we create two clusters to represent each wine.  
+
+```{r}
+clust1 = kmeans(X, 2, nstart=25)
+```
+
+As we saw in the explanaotry graphs, the two chemicals that might be best to use to differentiate red and white wine are the quantity of chlorides and total sulfur dioxide. 
+
+```{r}
+
+ggplot(wine) + 
+  geom_point(aes(chlorides, alcohol, color=factor(clust1$cluster))) +
+  facet_wrap(~ color)
+
+ggplot(wine) + 
+  geom_point(aes(total.sulfur.dioxide, alcohol, color=factor(clust1$cluster))) +
+  facet_wrap(~ color)
+```
+Looking at the above graphs, it would seem that regular clustering method works relatively well as it correctly clustered most of wines according to the color. 
+
+### PCA
+
+```{r}
+wine <- winecopy
+```
+
+Dropping columns 12 and 13 because we want to perform a principal compnents analysis on the eleven chemicals that are present in the wines. 
+```{r}
+wine2 <- wine[,-(12:13)]
+PCAwine = prcomp(wine2, scale=TRUE, rank=7)
+summary(PCAwine)
+```
+
+We use 7 principal components because it PC7 explains around 90\% of the variance in the wine dataset. 
+
+```{r}
+loadings_summary1 = PCAwine$rotation %>%
+  as.data.frame() %>%
+  rownames_to_column('Chemical')
+
+
+winetest = merge(wine, PCAwine$x[,1:6], by="row.names")
+winetest = winetest[,-(1)]
+
+winetest$color <- as.factor(winetest$color)
+
+lm1 = lm(quality ~ PC1 + PC2 + PC3 + PC4 + PC5 + PC6, data=winetest)
+summary(lm1)
+
+
+```
+
+Its good to explain quality relative to clustering, but its not great with an R squred value of .23
+# Question 3
+
+```{r}
+groceries <- read.transactions("G:/GitHub/DataMiningandStatisticalLearning/Data/groceries.txt", sep = ",")
+groceriescopy <- groceries
+
+
+#### What are the most frequent items?
+summary(groceries)
+
+#### Visualize Freuqency of Items that appear in 5% of the baskets and the top 20 most commonly bought items 
+itemFrequencyPlot(groceries, support = 0.05)
+
+itemFrequencyPlot(groceries, topN = 20)
+
+### Plotting Sparse Matrix
+image(sample(groceries, 100))
+
+
+#### Lets now build the rules
+
+groceryrules <- apriori(groceries, parameter = list(support = 0.006, confidence = 0.25, minlen = 2))
+arules::inspect(groceryrules[1:15])
+
+#### Sort by top 5 lift
+arules::inspect(sort(groceryrules, by = "lift")[1:5])
+ 
+#### Lift implie that someone who buys herbs are 4 times more likely to buy root vegetables. 
+
+#### Sort by top support, meaning how frequently it appears
+arules::inspect(sort(groceryrules, by = "support")[1:5])
+
+```
+It makes sense that whole milk is frequently bought, we constantly hear the message that breakfast is the most important meal of day and kids usually eat cereal served with milk. Milk is usually served with afternoon snakck or desserts, in coffee etc... Surprisingly, other vegetables is freqneutly bought as well. This is unsurpising because many US meals tend to be composed of some sort of protein with a side of vegetables. Of course, rolls/buns and soda are frequently bought. Yogurt is unsurprsing. etc...
+
+Looking at lifts, there is not anuthing very surpsiring that appears root herbs are often used when cooking root vegetables. Berries and whipped/sour cream are a dessert. Whole milk, other vegetables and tropical fruit imply that the person might be vegeterian or health concious so of course they would buy other vegetables. Beef and potatoes and fruit implies fruit?
